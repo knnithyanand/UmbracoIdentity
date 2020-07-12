@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.Net.Configuration;
 using System.Threading.Tasks;
 using System.Web.Security;
 using Microsoft.AspNet.Identity;
@@ -177,7 +179,8 @@ namespace UmbracoIdentity
             //    BodyFormat = "Your security code is: {0}"
             //});
 
-            manager.EmailService = new EmailService("admin@example.com", new EmailSender());
+            var smtpSection = (SmtpSection)ConfigurationManager.GetSection("system.net/mailSettings/smtp");
+            manager.EmailService = new EmailService(smtpSection.From, new EmailSender());
             //manager.SmsService = new SmsService();
 
             var dataProtectionProvider = options.DataProtectionProvider;
