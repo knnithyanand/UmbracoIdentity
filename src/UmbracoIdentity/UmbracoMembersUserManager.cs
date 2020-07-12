@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Web.Security;
 using Microsoft.AspNet.Identity;
 using Microsoft.AspNet.Identity.Owin;
@@ -6,6 +8,7 @@ using Umbraco.Core;
 using Umbraco.Core.Composing;
 using Umbraco.Core.Logging;
 using Umbraco.Core.Scoping;
+using Umbraco.Core.Security;
 using Umbraco.Core.Services;
 using UmbracoIdentity.Models;
 
@@ -174,7 +177,7 @@ namespace UmbracoIdentity
             //    BodyFormat = "Your security code is: {0}"
             //});
 
-            //manager.EmailService = new EmailService();
+            manager.EmailService = new EmailService("admin@example.com", new EmailSender());
             //manager.SmsService = new SmsService();
 
             var dataProtectionProvider = options.DataProtectionProvider;
