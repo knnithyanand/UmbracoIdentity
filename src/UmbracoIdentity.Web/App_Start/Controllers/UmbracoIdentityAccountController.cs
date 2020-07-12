@@ -18,6 +18,7 @@ using Umbraco.Core.Cache;
 using Umbraco.Core.Logging;
 using Umbraco.Core.Persistence;
 using Umbraco.Core.Services;
+using System.Security.Policy;
 
 namespace UmbracoIdentity.Web.Controllers 
 {
@@ -316,7 +317,7 @@ namespace UmbracoIdentity.Web.Controllers
             if (ModelState.IsValid)
             {
                 var user = await _userManager.FindAsync(model.Username, model.Password);
-                if (user != null)
+                if (user != null && user.EmailConfirmed)
                 {
                     await SignInAsync(user, true);
                     return RedirectToCurrentUmbracoPage();
@@ -365,6 +366,7 @@ namespace UmbracoIdentity.Web.Controllers
             var user = new UmbracoApplicationMember()
             {
                 UserName = model.UsernameIsEmail || model.Username == null ? model.Email : model.Username,
+                Name = model.Name,
                 Email = model.Email,
                 MemberProperties = model.MemberProperties,
                 MemberTypeAlias = model.MemberTypeAlias
@@ -373,13 +375,9 @@ namespace UmbracoIdentity.Web.Controllers
             var result = await _userManager.CreateAsync(user, model.Password);
             if (result.Succeeded)
             {
-                await SignInAsync(user, isPersistent: false);
-
-                // For more information on how to enable account confirmation and password reset please visit http://go.microsoft.com/fwlink/?LinkID=320771
-                // Send an email with this link
-                // string code = await UserManager.GenerateEmailConfirmationTokenAsync(user.Id);
-                // var callbackUrl = Url.Action("ConfirmEmail", "Account", new { userId = user.Id, code = code }, protocol: Request.Url.Scheme);
-                // await UserManager.SendEmailAsync(user.Id, "Confirm your account", "Please confirm your account by clicking <a href=\"" + callbackUrl + "\">here</a>");
+                string code = await _userManager.GenerateEmailConfirmationTokenAsync(user.Id);
+                var callbackUrl = Url.Action("ConfirmEmail", "UmbracoIdentityAccount", new { userId = user.Id, code = code }, protocol: Request.Url.Scheme);
+                await _userManager.SendEmailAsync(user.Id, "Confirm your account", $"Please confirm your account by clicking <a href=\"{callbackUrl}\">here</a>");
 
                 TempData["FormSuccess"] = true;
 
@@ -399,6 +397,21 @@ namespace UmbracoIdentity.Web.Controllers
             return CurrentUmbracoPage();
         }
 
+        [AllowAnonymous]
+        public async Task<ActionResult> ConfirmEmail(int userId, string code)
+        {
+            if (userId == 0 || code == null)
+            {
+                return View("Error");
+            }
+            var result = await _userManager.ConfirmEmailAsync(userId, code);
+            //if (result.Succeeded)
+            //{
+            //    return View("ConfirmEmail");
+            //}
+            //AddErrors(result);
+            return RedirectToLocal("/");
+        }
         #endregion
 
         #region Helpers

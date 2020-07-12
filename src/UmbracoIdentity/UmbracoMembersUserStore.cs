@@ -66,16 +66,19 @@ namespace UmbracoIdentity
         {
             ThrowIfDisposed();
             if (user == null) throw new ArgumentNullException("user");
-            
+
             var member = _memberService.CreateMember(
                     user.UserName, user.Email,
                     user.Name.IsNullOrWhiteSpace() ? user.UserName : user.Name,
-                    user.MemberTypeAlias.IsNullOrWhiteSpace() ? _membershipProvider.DefaultMemberTypeAlias: user.MemberTypeAlias);
+                    user.MemberTypeAlias.IsNullOrWhiteSpace() ? _membershipProvider.DefaultMemberTypeAlias : user.MemberTypeAlias);
+
+            // Set user as not approved until email confirmation
+            member.IsApproved = false;
 
             UpdateMemberProperties(member, user);
 
             //the password must be 'something' it could be empty if authenticating
-            // with an external provider so we'll just generate one and prefix it, the 
+            // with an external provider so we'll just generate one and prefix it, the
             // prefix will help us determine if the password hasn't actually been specified yet.
             if (member.RawPasswordValue.IsNullOrWhiteSpace())
             {
@@ -110,7 +113,7 @@ namespace UmbracoIdentity
                 memberRoleService.DissociateRoles(new[] { member.Id }, remove);
                 memberRoleService.AssignRoles(new[] { member.Id }, add);
             }
-            
+
         }
 
         /// <summary>
@@ -159,7 +162,7 @@ namespace UmbracoIdentity
                     if (add.Any())
                         memberRoleService.AssignRoles(new[] {found.Id}, add);
                 }
-            }           
+            }
         }
 
         public Task DeleteAsync(TMember user)
@@ -263,7 +266,7 @@ namespace UmbracoIdentity
             ThrowIfDisposed();
             if (user == null) throw new ArgumentNullException("user");
 
-            throw new NotImplementedException();
+            return Task.FromResult(user.EmailConfirmed);
         }
 
         public virtual Task SetEmailConfirmedAsync(TMember user, bool confirmed)
@@ -271,7 +274,8 @@ namespace UmbracoIdentity
             ThrowIfDisposed();
             if (user == null) throw new ArgumentNullException("user");
 
-            throw new NotImplementedException();
+            user.EmailConfirmed = confirmed;
+            return UpdateAsync(user);
         }
 
         public Task<TMember> FindByEmailAsync(string email)
@@ -381,7 +385,7 @@ namespace UmbracoIdentity
             var userRole = instance;
             roles.Add(userRole);
 
-            return Task.FromResult(0);            
+            return Task.FromResult(0);
         }
 
         /// <summary>
@@ -485,6 +489,42 @@ namespace UmbracoIdentity
             {
                 result.SecurityStamp = memberSecurityStamp;
             }
+            var memberEmailConfirmed = member.GetEmailConfirmed(out propertyTypeExists);
+            if (!propertyTypeExists)
+            {
+                _logger.Warn<UmbracoMembersUserStore<TMember>>($"The {UmbracoIdentityConstants.EmailConfirmedProperty} does not exist on the member type {member.ContentType.Alias}, see docs on how to fix: https://github.com/Shazwazza/UmbracoIdentity/wiki");
+            }
+            else
+            {
+                result.EmailConfirmed = memberEmailConfirmed;
+            }
+            var memberPhoneNumber = member.GetPhoneNumber(out propertyTypeExists);
+            if (!propertyTypeExists)
+            {
+                _logger.Warn<UmbracoMembersUserStore<TMember>>($"The {UmbracoIdentityConstants.PhoneNumberProperty} does not exist on the member type {member.ContentType.Alias}, see docs on how to fix: https://github.com/Shazwazza/UmbracoIdentity/wiki");
+            }
+            else
+            {
+                result.PhoneNumber = memberPhoneNumber;
+            }
+            var memberPhoneNumberConfirmed = member.GetPhoneNumberConfirmed(out propertyTypeExists);
+            if (!propertyTypeExists)
+            {
+                _logger.Warn<UmbracoMembersUserStore<TMember>>($"The {UmbracoIdentityConstants.PhoneNumberConfirmedProperty} does not exist on the member type {member.ContentType.Alias}, see docs on how to fix: https://github.com/Shazwazza/UmbracoIdentity/wiki");
+            }
+            else
+            {
+                result.PhoneNumberConfirmed = memberPhoneNumberConfirmed;
+            }
+            var memberTwoFactorEnabled = member.GetTwoFactorEnabled(out propertyTypeExists);
+            if (!propertyTypeExists)
+            {
+                _logger.Warn<UmbracoMembersUserStore<TMember>>($"The {UmbracoIdentityConstants.TwoFactorEnabledProperty} does not exist on the member type {member.ContentType.Alias}, see docs on how to fix: https://github.com/Shazwazza/UmbracoIdentity/wiki");
+            }
+            else
+            {
+                result.TwoFactorEnabled = memberTwoFactorEnabled;
+            }
 
             result.MemberProperties = GetMemberProperties(member).ToList();
 
@@ -565,6 +605,30 @@ namespace UmbracoIdentity
                 anythingChanged = true;
                 member.Properties[UmbracoIdentityConstants.SecurityStampProperty].SetValue(user.SecurityStamp);
             }
+            var memberEmailConfirmed = member.GetEmailConfirmed(out propertyTypeExists);
+            if (memberEmailConfirmed != user.EmailConfirmed)
+            {
+                anythingChanged = true;
+                member.Properties[UmbracoIdentityConstants.EmailConfirmedProperty].SetValue(user.EmailConfirmed);
+            }
+            var memberPhoneNumber = member.GetPhoneNumber(out propertyTypeExists);
+            if (memberPhoneNumber != null && memberPhoneNumber != user.PhoneNumber)
+            {
+                anythingChanged = true;
+                member.Properties[UmbracoIdentityConstants.PhoneNumberProperty].SetValue(user.PhoneNumber);
+            }
+            var memberPhoneNumberConfirmed = member.GetPhoneNumberConfirmed(out propertyTypeExists);
+            if (memberPhoneNumberConfirmed != user.PhoneNumberConfirmed)
+            {
+                anythingChanged = true;
+                member.Properties[UmbracoIdentityConstants.PhoneNumberConfirmedProperty].SetValue(user.PhoneNumberConfirmed);
+            }
+            var memberTwoFactorEnabled = member.GetTwoFactorEnabled(out propertyTypeExists);
+            if (memberTwoFactorEnabled != user.TwoFactorEnabled)
+            {
+                anythingChanged = true;
+                member.Properties[UmbracoIdentityConstants.TwoFactorEnabledProperty].SetValue(user.TwoFactorEnabled);
+            }
 
             if (user.MemberProperties != null)
             {
@@ -588,14 +652,14 @@ namespace UmbracoIdentity
                     member.Properties[property.Alias].SetValue(property.Value);
                 }
             }
-            
+
             return anythingChanged;
         }
 
-        
+
 
         /// <summary>
-        /// This checks if the password 
+        /// This checks if the password
         /// </summary>
         /// <param name="storedPass"></param>
         /// <returns></returns>
@@ -629,7 +693,7 @@ namespace UmbracoIdentity
             }
             return user;
         }
-        
+
         private void ThrowIfDisposed()
         {
             if (_disposed)
